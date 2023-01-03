@@ -19,13 +19,6 @@ import (
 	"time"
 )
 
-type Args struct {
-	A, B int
-}
-type Quotient struct {
-	Quo, Rem int
-}
-type Arith int
 type Addre struct {
 	Ip   string
 	Port string
@@ -70,7 +63,6 @@ var (
 )
 
 const m = 160 //sha1のbit数
-
 func main() {
 	//defer profile.Start(profile.MemProfile).Stop()
 	Filelist = make(map[[20]byte]FileI)
@@ -183,20 +175,19 @@ func main() {
 		}
 	}()
 
+	go func() {
+		for {
+			time.Sleep(15*time.Second + time.Duration(rand.Intn(30000000000)))
+			checkPredecessor()
+		}
+
+	}()
 	/*
 		go func() {
-			for {
-				time.Sleep(15*time.Second + time.Duration(rand.Intn(30000000000)))
-				checkPredecessor()
-			}
-
+			closeclient()
+			time.Sleep(time.Minute)
 		}()
-		/*
-			go func() {
-				closeclient()
-				time.Sleep(time.Minute)
-			}()
-			//*/
+		//*/
 	var arr [2]string
 	var hoge Addre
 	hoge.Ip = "127.0.0.1"
@@ -283,16 +274,14 @@ func main() {
 		}
 	}
 
-	<-ch                   //listenerの終了を永久に待たせる
-	Log(fmt.Sprintln(err)) //error handling
+	<-ch //listenerの終了を永久に待たせる
+	Log(fmt.Sprintln(err))
 	Log(fmt.Sprintln("worked on" + Self.Ip))
 }
 
 func Listener(Self Addre, ch chan bool) error { //これでRPCをListenする
 	addre := new(RP)
 	rpc.Register(addre)
-	arith := new(Arith)
-	rpc.Register(arith)
 	rpc.HandleHTTP()
 	l, e := net.Listen("tcp4", Self.Ip+":"+Self.Port)
 	//l, e := net.Listen("tcp4", "127.0.0.1"+":"+Self.Port)
@@ -310,15 +299,13 @@ func Listener(Self Addre, ch chan bool) error { //これでRPCをListenする
 }
 func (a RP) Stabilize(_ int, reply *Addre) error {
 	Log(fmt.Sprintln("stabilize (Successor:", Successor, ")"))
-	/*Predecessor.ch <- true
-	defer func() { <-Predecessor.ch }()*/
+
 	client, err := getClient(*Successor) //dial
 	if err != nil {
 		Log(fmt.Sprintln("0", err))
 		return err
 	}
 
-	//defer client.Close()
 	Successor_s_Pred := new(Addre)
 	err = client.Call("RP.ReplyPred", Self, Successor_s_Pred)
 	if err != nil || Successor_s_Pred == nil {
@@ -333,8 +320,7 @@ func (a RP) Stabilize(_ int, reply *Addre) error {
 		//Log(fmt.Sprintln("stabilize error", err)
 	} else if cmp && *Successor_s_Pred != *Self /*Successor > Successor_s_Pred > Self*/ {
 		*Successor = *Successor_s_Pred
-		//Fingers[0] = Successor
-		//	fmt.Println(Successor_s_Pred, cmp)
+
 	}
 
 	r := new(Addre)
@@ -353,15 +339,12 @@ func (a RP) Stabilize(_ int, reply *Addre) error {
 }
 
 func fix_fingers() {
-	//ClientMutex.Lock()
-	//defer ClientMutex.Unlock()
 
 	checkingfinger = checkingfinger + 1
 	if checkingfinger >= m {
 		checkingfinger = 0
 	}
 
-	//fmt.Println("tst", checkingfinger)
 	bigNum := big.NewInt(int64(checkingfinger))
 	bigTwo := big.NewInt(2)
 	bigM := big.NewInt(m)
@@ -381,17 +364,16 @@ func fix_fingers() {
 		Fingers[checkingfinger] = nil
 	}
 
-	/*if checkingfinger == 17 || checkingfinger == 50 {
+	if checkingfinger == 17 || checkingfinger == 50 {
 		err = new(RP).Stabilize(1, new(Addre))
 		if err != nil {
 			Log(fmt.Sprintln("3", err))
 		}
-	}*/
+	}
 	if checkingfinger == 101 {
 		checkPredecessor()
 	}
 	if checkingfinger == 0 {
-		//Stabilize()
 		file, err := os.Create(Self.Ip + Self.Port + ".txt") // ファイルを作成
 		if err != nil {
 			Log(fmt.Sprintln("4", err))
@@ -408,29 +390,11 @@ func fix_fingers() {
 			Log(fmt.Sprintln("6", err))
 			return
 		}
-		/*newLine := "Self:" + fmt.Sprintf("%v", *Self) + "Successor:" + fmt.Sprintf("%v", Successor) + "Predecessor:" + fmt.Sprintf("%v", Predecessor.Addre)
-		_, err = fmt.Fprintln(f, newLine)
-		if err != nil {
-			Log(fmt.Sprintln("7", err))
-		}//*/
-		/*buf := (idadd(addr2SHA1(*Self), big.NewInt(0)))
-		newLine = fmt.Sprintf(" %v", new(big.Int).SetBytes(buf[:])) + "Self" + fmt.Sprintf(" %s", Self)
-		_, err = fmt.Fprintln(f, newLine)
-		if err != nil {
-			Log(fmt.Sprintln("9", err))
-		}
-		newLine = fmt.Sprintln(addr2SHA1(*Self))
-		_, err = fmt.Fprintln(f, newLine)
-		if err != nil {
-			Log(fmt.Sprintln("8", err))
-		}//*/
 		newLine := fmt.Sprintf("%v [shape = box]; ", Self.Port)
 		_, err = fmt.Fprintln(f, newLine)
 		if err != nil {
 			Log(fmt.Sprintln("8", err))
-		} //*/
-		//newLine := fmt.Sprintf(" %v", new(big.Int).SetBytes(buf[:])) + "Finger[" + strconv.Itoa(i) + "]:" + fmt.Sprintf(" %s", Fingers[i]) + "in" + fmt.Sprintln(*Self)
-
+		}
 		newLine = fmt.Sprintf(" %v -> %v [style = \"solid\", label = \"next\"];", Self.Port, Fingers[1].Port)
 		_, err = fmt.Fprintln(f, newLine)
 		if err != nil {
@@ -446,9 +410,7 @@ func fix_fingers() {
 					Log(fmt.Sprintln("9", err))
 				}
 			}
-		} //*/
-		//debug.FreeOSMemory()
-
+		}
 		//クライアント閉じる
 
 		if checkingfinger == 100 {
@@ -476,7 +438,7 @@ func fix_fingers() {
 				}
 			}
 		}
-		//*/
+
 	}
 }
 func closestPrecedingNode(query [20]byte) (ad *Addre, ok bool) {
@@ -519,23 +481,6 @@ func getClient(query Addre) (client *rpc.Client, err error) {
 	}
 	return client, nil
 }
-
-/*
-func closeclient() {
-	//ClientMutex.Lock()
-	//defer ClientMutex.Unlock()
-	SMutex.Lock()
-	defer SMutex.Unlock()
-	CMutex.Lock()
-	defer CMutex.Unlock()
-	for _, client := range ClientList {
-		//client, _ := getClient(clientID)
-		_ = client.Close()
-	}
-
-}
-
-//*/
 
 func checkPredecessor() {
 	if Predecessor.Addre != nil {
@@ -627,38 +572,26 @@ func iskeyin(query [20]byte, smaller [20]byte, larger [20]byte) (cmp bool, ok bo
 	return false, false
 }
 func idadd(x [20]byte, y *big.Int) [20]byte {
-	/*defer func() {
-		if err := recover(); err != nil {
-			return
-		}
-	}()*/
 	var tmp [20]byte
 	z := new(big.Int)
 	z = z.SetBytes(x[:])
 	z = z.Add(y, z)
 	for i := 0; i < len(z.Bytes()) && i < 20; i++ {
 		tmp[i] = z.Bytes()[i]
-
 	}
-
 	return tmp
 }
 func Join(np *Addre, client *rpc.Client) error {
-
 	n := Self
 	Predecessor.Addre = nil
 	Predecessor.ch <- true
-	//fmt.Println("tst")
-
 	defer func() { <-Predecessor.ch }()
 	defer Log("joined" + fmt.Sprintln(Self))
 	Predecessor.Addre = nil
 	hoge := addr2SHA1(*n)
-	//	q := new(big.Int).Add(new(big.Int).SetBytes(hoge[:]), new(big.Int).SetInt64(1))
-
 	time.Sleep(1000 * time.Millisecond)
-	err := client.Call("RP.FindSuccessor", hoge, Successor)
 
+	err := client.Call("RP.FindSuccessor", hoge, Successor)
 	Log(fmt.Sprintln(Successor))
 	if err != nil {
 		panic(err)
@@ -686,14 +619,6 @@ func Join(np *Addre, client *rpc.Client) error {
 	}
 
 	Log("test")
-	/*
-		err = client1.Call("RP.PredStabilizeCall", true, new(bool))
-		Log("PredStabilizeCall")
-		if err != nil {
-			Log(fmt.Sprintln("13", err))
-			go func() { Join(Self, client) }()
-			return nil
-		}*/
 
 	return nil
 }
@@ -711,7 +636,7 @@ func Log(logstr string) error {
 }
 func (a RP) ReplyPred(n *Addre, reply *Addre) error {
 	if Predecessor.Addre == nil {
-		//return nil
+
 		return errors.New("Reply_pred:Predecessor is nil")
 	}
 	*reply = *(Predecessor.Addre)
@@ -719,7 +644,6 @@ func (a RP) ReplyPred(n *Addre, reply *Addre) error {
 	return nil
 }
 func (a RP) Notify(predCandidate Addre, reply *Addre) error {
-	//	fmt.Println("notified by ", predCandidate, "My Pred:", Predecessor.Addre)
 	Log(fmt.Sprintln("notified by ", predCandidate, "My Pred:", Predecessor.Addre))
 	if predCandidate == *Self {
 		*reply = Addre{}
@@ -755,7 +679,6 @@ func (a RP) Replya(n *Addre, reply *string) error {
 }
 
 func (a RP) FindSuccessor(query [20]byte, address *Addre) error {
-	//Lock <- true
 
 	if cmp, ok := iskeyin(query, addr2SHA1(*Self), addr2SHA1(*Successor)); (cmp && ok) && (query != addr2SHA1(*Self)) {
 		*address = *Successor
@@ -785,7 +708,6 @@ func (a RP) FindSuccessor(query [20]byte, address *Addre) error {
 			}
 
 		} else {
-			//fmt.Println(ans)
 			return errors.New("(Find_Suc)closestprecedingnode: error")
 		}
 
@@ -794,39 +716,18 @@ func (a RP) FindSuccessor(query [20]byte, address *Addre) error {
 }
 func (a RP) LockS(b *Addre, re *bool) error {
 	Predecessor.ch <- true
-	//	fmt.Println("locked!", b)
 	return nil
 }
 func (a RP) ULockS(t bool, re *bool) error {
-	/*if IsInitiallized {
-		_ = new(RP).Stabilize(0, new(Addre))
-		c, e := getClient(*Predecessor.Addre)
-		if e != nil {
-			Log(fmt.Sprintln(e))
-		}
-		c.Call("RP.Notify", *Self, new(Addre))
-		for i := 0; i < m; i++ {
-			fix_fingers()
-			time.Sleep(time.Second / 3)
-		}
-		IsInitiallized = true
-	}!//*/
 	<-Predecessor.ch
-	//fmt.Println("Unlocked!")
 	return nil
 }
-func (a *Arith) Sumup(args *Args, reply *int) error {
-	*reply = (*args).A + (*args).B
-	return nil
-}
+
 func (a RP) PredStabilizeCall(_ bool, reply *bool) error {
 	if OldPrede == nil || Predecessor.Addre == nil {
 		return nil
 	}
-	/*ClientMutex.Lock()
-	defer ClientMutex.Unlock()//*/
 	c, e := getClient(*(OldPrede))
-	//fmt.Print("Predstab\n")
 	if e != nil {
 		return e
 	}
@@ -836,14 +737,6 @@ func (a RP) PredStabilizeCall(_ bool, reply *bool) error {
 	if e != nil {
 		return e
 	}
-	/*c, e = getClient(*(Predecessor.Addre))
-	if e != nil {
-		return e
-	}
-	e = c.Call("RP.Stabilize", 1, new(Addre))
-	if e != nil {
-		return e
-	}//*/
 	return nil
 }
 func (a RP) PutKey(query FileI, reply *bool) error {
@@ -859,7 +752,6 @@ func (a RP) PutKey(query FileI, reply *bool) error {
 	}
 }
 
-// Fake func
 func (a RP) GetFile(query [20]byte, reply *FileI) error {
 	obj, ok := Filelist[query]
 	if !ok {
