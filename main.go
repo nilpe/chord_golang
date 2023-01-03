@@ -80,8 +80,7 @@ func main() {
 	f := flag.String("selfIP", "", "接続元IPの指定")
 	g := flag.String("sucIP", "", "接続先ipの指定")
 	h := flag.String("sucPort", "1234", "接続先portの指定") //この辺でオプションを読み取る
-	//file, err := os.Create(Self.Ip + Self.Port + ".txt")
-	//_ = file.Close()
+
 	flag.Parse()
 	for _, a := range addrs { //自分のIP取得(Unix系向け)
 		if Ipnet, ok := a.(*net.IPNet); ok && !Ipnet.IP.IsLoopback() { //たぶんOKは捨ててもいい
@@ -180,12 +179,7 @@ func main() {
 		}
 
 	}()
-	/*
-		go func() {
-			closeclient()
-			time.Sleep(time.Minute)
-		}()
-		//*/
+
 	var arr [2]string
 	var hoge Addre
 	hoge.Ip = "127.0.0.1"
@@ -254,6 +248,7 @@ func main() {
 			} else {
 				fmt.Println("plz retry")
 			}
+			//ここから下は検索のベンチマーク 上をコメントアウトして適当にやってください
 			/*
 				for i := 0; i < cnt; i++ {
 					ans := new(Addre)
@@ -277,7 +272,8 @@ func main() {
 	Log(fmt.Sprintln("worked on" + Self.Ip))
 }
 
-func Listener(Self Addre, ch chan bool) error { //これでRPCCをListenする
+// これでRPCをListenする
+func Listener(Self Addre, ch chan bool) error {
 	addre := new(RPC)
 	rpc.Register(addre)
 	rpc.HandleHTTP()
@@ -295,6 +291,10 @@ func Listener(Self Addre, ch chan bool) error { //これでRPCCをListenする
 	ch <- true            //動かさない
 	return nil
 }
+
+// n.Stabilizeに対応。
+// やろうと思えば論文と同じ書き方で論文と同じような関数を実装できたが、
+// 本質的ではない上に読みにくいのでGoのRPCでベタ書きすることにした。
 func (a RPC) Stabilize(_ int, reply *Addre) error {
 	Log(fmt.Sprintln("stabilize (Successor:", Successor, ")"))
 
@@ -336,6 +336,10 @@ func (a RPC) Stabilize(_ int, reply *Addre) error {
 	return nil
 }
 
+// n.fingersに対応。
+// Fingerテーブルを更新する。ほとんど論文通りに実装できた。
+// 論文と違う点は、クライアントを閉じる処理をこの関数に追加した。
+// クライアントをきちんと閉じないと、メモリリーク･goroutineリークが起こって簡単にOOMキラーが発動する。
 func fix_fingers() {
 
 	checkingfinger = checkingfinger + 1
@@ -362,15 +366,6 @@ func fix_fingers() {
 		Fingers[checkingfinger] = nil
 	}
 
-	if checkingfinger == 17 || checkingfinger == 50 {
-		err = new(RPC).Stabilize(1, new(Addre))
-		if err != nil {
-			Log(fmt.Sprintln("3", err))
-		}
-	}
-	if checkingfinger == 101 {
-		checkPredecessor()
-	}
 	if checkingfinger == 0 {
 		file, err := os.Create(Self.Ip + Self.Port + ".txt") // ファイルを作成
 		if err != nil {
@@ -439,6 +434,8 @@ func fix_fingers() {
 
 	}
 }
+
+// このノードが持っている情報をもとに最も近いノードを探す。
 func closestPrecedingNode(query [20]byte) (ad *Addre, ok bool) {
 	for i := m - 1; i >= 0; i-- {
 		if Fingers[i] != nil {
@@ -452,12 +449,17 @@ func closestPrecedingNode(query [20]byte) (ad *Addre, ok bool) {
 	}
 	return Self, true
 }
+
+// クライアントを取得する。
+// 逐一取得しても一応動作するが、無駄にgoroutineが増えるので非推奨。
+// マップで一括管理するのでマップを同時に書き込みすることのないようロックをかけた。
+// GoのMutexは不安定なイメージがあるが、channelよりこちらのほうがGoroutineを増やさず済む。
 func getClient(query Addre) (client *rpc.Client, err error) {
 	GetCMutex.Lock()
 	defer GetCMutex.Unlock()
 
-	client, isexist := ClientList[query]
-	if isexist && client != nil {
+	client, doesexist := ClientList[query]
+	if doesexist && client != nil {
 		err := client.Call("RPC.Replya", Self, new(string))
 		if err == nil {
 			return client, nil
@@ -480,6 +482,8 @@ func getClient(query Addre) (client *rpc.Client, err error) {
 	return client, nil
 }
 
+// 自身のPredecessorがきちんと動作しているか確認。
+// なくても一応動く。
 func checkPredecessor() {
 	if Predecessor.Addre != nil {
 		CMutex.Lock()
@@ -504,12 +508,16 @@ func checkPredecessor() {
 		//ClientMutex.Unlock()
 	}
 }
+
+// アドレスをSHA-1ハッシュするだけ
 func addr2SHA1(addr Addre) [20]byte {
 	addrByte := []byte(addr.Ip + ":" + addr.Port)
 	tmp := sha1.Sum(addrByte)
 	return tmp
 }
-func AddreComp(addr1 *Addre, addr2 *Addre) (int, bool) {
+
+// アドレス2つを比較する。addr1>addr2ならばcmp==1,=ならばcmp==0、<ならばcmp==-1。
+func AddreComp(addr1 *Addre, addr2 *Addre) (cmp int, ok bool) {
 	//要調整
 	if addr1 == nil || addr2 == nil {
 		return 0, false
@@ -536,6 +544,8 @@ func AddreComp(addr1 *Addre, addr2 *Addre) (int, bool) {
 
 	return Num1.Cmp(Num2), true
 }
+
+// a>b->1、a=b->0、a<b->-1
 func bytecmp(a, b []byte) (int, bool) {
 	//a>b ->1
 	Num1 := new(big.Int).SetBytes(a[:])
@@ -543,6 +553,8 @@ func bytecmp(a, b []byte) (int, bool) {
 	return Num1.Cmp(Num2), true
 }
 
+// query∈[smaller,larger]を返す。
+// 実際にsmaller<largerである必要はなく、論文同様に扱える。
 func iskeyin(query [20]byte, smaller [20]byte, larger [20]byte) (cmp bool, ok bool) {
 	if smaller == larger || smaller == query || larger == query { //厳密には異なる
 		return true, true
@@ -569,6 +581,9 @@ func iskeyin(query [20]byte, smaller [20]byte, larger [20]byte) (cmp bool, ok bo
 	}
 	return false, false
 }
+
+// もう少しやりようはあったように思う。具体的にはすべてのハッシュ値を整数で扱うなど。今後の課題。
+// sha-1ハッシュと整数を加算したいときに使う。
 func idadd(x [20]byte, y *big.Int) [20]byte {
 	var tmp [20]byte
 	z := new(big.Int)
@@ -579,6 +594,9 @@ func idadd(x [20]byte, y *big.Int) [20]byte {
 	}
 	return tmp
 }
+
+// n.joinに対応。clientはcontact nodeのクライアント。つながればどこでもいい。
+// ただしcloseはfixfinger時にしか行わないので注意。
 func Join(np *Addre, client *rpc.Client) error {
 	n := Self
 	Predecessor.Addre = nil
@@ -632,6 +650,11 @@ func Log(logstr string) error {
 	}
 	return nil
 }
+
+//~~~~~以下RPC用関数~~~~~
+
+// 自分のPredecessorを"返す"だけ。
+// GolangのRPCは非常に使い勝手が悪く、返り値にerror型しか返せないようなのでこんなきったない実装になる。
 func (a RPC) ReplyPred(n *Addre, reply *Addre) error {
 	if Predecessor.Addre == nil {
 
@@ -641,6 +664,9 @@ func (a RPC) ReplyPred(n *Addre, reply *Addre) error {
 
 	return nil
 }
+
+// Notifyしてきた者が自分のPredecessorとして適格かどうかを判定し、そうでないならエラーを返す。
+// 適格ならPredecessorに代入。
 func (a RPC) Notify(predCandidate Addre, reply *Addre) error {
 	Log(fmt.Sprintln("notified by ", predCandidate, "My Pred:", Predecessor.Addre))
 	if predCandidate == *Self {
@@ -670,12 +696,14 @@ func (a RPC) Notify(predCandidate Addre, reply *Addre) error {
 	return errors.New("you are not my predecessor")
 }
 
+// 主に死活管理用。pingの代わり。
 func (a RPC) Replya(n *Addre, reply *string) error {
 	tekitou := "a"
 	*reply = tekitou
 	return nil
 }
 
+// queryの次のノードを探してくる関数。論文参照。
 func (a RPC) FindSuccessor(query [20]byte, address *Addre) error {
 
 	if cmp, ok := iskeyin(query, addr2SHA1(*Self), addr2SHA1(*Successor)); (cmp && ok) && (query != addr2SHA1(*Self)) {
@@ -712,31 +740,21 @@ func (a RPC) FindSuccessor(query [20]byte, address *Addre) error {
 	}
 	return nil
 }
+
+// Join時にPredecessorがおかしくならないよう、ロックをかける。
+// 常識的なJoinNode/secondを仮定するなら別に要らないが、一応実装した。
 func (a RPC) LockS(b *Addre, re *bool) error {
 	Predecessor.ch <- true
 	return nil
 }
+
+// アンロック。
 func (a RPC) ULockS(t bool, re *bool) error {
 	<-Predecessor.ch
 	return nil
 }
 
-func (a RPC) PredStabilizeCall(_ bool, reply *bool) error {
-	if OldPrede == nil || Predecessor.Addre == nil {
-		return nil
-	}
-	c, e := getClient(*(OldPrede))
-	if e != nil {
-		return e
-	}
-
-	e = c.Call("RPC.Stabilize", 1, new(Addre))
-
-	if e != nil {
-		return e
-	}
-	return nil
-}
+// queryとなるファイルの保存を依頼する関数。実際のファイルトランザクションは未実装。
 func (a RPC) PutKey(query FileI, reply *bool) error {
 	couldBeStored, ok := iskeyin(query.Key, addr2SHA1(*Predecessor.Addre), addr2SHA1(*Self))
 	if !ok {
@@ -750,6 +768,8 @@ func (a RPC) PutKey(query FileI, reply *bool) error {
 	}
 }
 
+// そのノードがファイルを保持しているのならファイルを、そうでないのならエラーを"返す"。
+// 実際のファイルトランザクションは未実装。
 func (a RPC) GetFile(query [20]byte, reply *FileI) error {
 	obj, ok := Filelist[query]
 	if !ok {
