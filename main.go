@@ -23,7 +23,7 @@ type Addre struct {
 	Ip   string
 	Port string
 }
-type RP Addre
+type RPC Addre
 type FileI struct {
 	FileName  string
 	IsEnabled bool
@@ -145,15 +145,13 @@ func main() {
 
 	fmt.Printf("(main)Predecessor: %v, Successor: %v\n", Predecessor.Addre, Successor)
 
-	//fixFingersで呼ばせることにしてみた
-
 	rand.Seed(time.Now().UnixNano())
 	go func() { //StabilizeLoop
-		r := new(RP)
+
 		for {
 			time.Sleep(15*time.Second + time.Duration(rand.Intn(10000000000)))
 			//time.Sleep(1*time.Second + time.Duration(rand.Intn(1000000000)))
-			err = (r).Stabilize(1, new(Addre))
+			err = new(RPC).Stabilize(1, new(Addre))
 			if err != nil {
 				Log(fmt.Sprintln(err))
 			}
@@ -210,7 +208,7 @@ func main() {
 			if arr[0] == "get" {
 				buf := []byte(arr[1])
 				q := sha1.Sum(buf)
-				e := new(RP).FindSuccessor(q, &answer)
+				e := new(RPC).FindSuccessor(q, &answer)
 				if e != nil {
 					fmt.Println(e)
 					continue
@@ -222,7 +220,7 @@ func main() {
 					continue
 				}
 				a := new(FileI)
-				e = c.Call("RP.GetFile", q, a)
+				e = c.Call("RPC.GetFile", q, a)
 				if e != nil {
 					fmt.Println(e)
 					continue
@@ -233,7 +231,7 @@ func main() {
 			} else if arr[0] == "put" {
 				buf := []byte(arr[1])
 				q := sha1.Sum(buf)
-				e := new(RP).FindSuccessor(q, &answer)
+				e := new(RPC).FindSuccessor(q, &answer)
 				if e != nil {
 					fmt.Println(e)
 					continue
@@ -245,7 +243,7 @@ func main() {
 					continue
 				}
 				F := FileI{arr[1], true, q}
-				e = c.Call("RP.PutKey", F, new(bool))
+				e = c.Call("RPC.PutKey", F, new(bool))
 				if e != nil {
 					fmt.Println(e)
 					continue
@@ -260,7 +258,7 @@ func main() {
 				for i := 0; i < cnt; i++ {
 					ans := new(Addre)
 					query := sha1.Sum([]byte(strconv.Itoa(i)))
-					err = client.Call("RP.FindSuccessor", query, ans)
+					err = client.Call("RPC.FindSuccessor", query, ans)
 					t := addr2SHA1((*ans))
 					answer = answer + fmt.Sprintln(ans, new(big.Int).SetBytes(query[:]), new(big.Int).SetBytes(t[:]))
 					if err != nil {
@@ -279,8 +277,8 @@ func main() {
 	Log(fmt.Sprintln("worked on" + Self.Ip))
 }
 
-func Listener(Self Addre, ch chan bool) error { //これでRPCをListenする
-	addre := new(RP)
+func Listener(Self Addre, ch chan bool) error { //これでRPCCをListenする
+	addre := new(RPC)
 	rpc.Register(addre)
 	rpc.HandleHTTP()
 	l, e := net.Listen("tcp4", Self.Ip+":"+Self.Port)
@@ -297,7 +295,7 @@ func Listener(Self Addre, ch chan bool) error { //これでRPCをListenする
 	ch <- true            //動かさない
 	return nil
 }
-func (a RP) Stabilize(_ int, reply *Addre) error {
+func (a RPC) Stabilize(_ int, reply *Addre) error {
 	Log(fmt.Sprintln("stabilize (Successor:", Successor, ")"))
 
 	client, err := getClient(*Successor) //dial
@@ -307,7 +305,7 @@ func (a RP) Stabilize(_ int, reply *Addre) error {
 	}
 
 	Successor_s_Pred := new(Addre)
-	err = client.Call("RP.ReplyPred", Self, Successor_s_Pred)
+	err = client.Call("RPC.ReplyPred", Self, Successor_s_Pred)
 	if err != nil || Successor_s_Pred == nil {
 		Log(fmt.Sprintln("1", err))
 	}
@@ -324,7 +322,7 @@ func (a RP) Stabilize(_ int, reply *Addre) error {
 	}
 
 	r := new(Addre)
-	err = client.Call("RP.Notify", *Self, r)
+	err = client.Call("RPC.Notify", *Self, r)
 	Log("SucNewPred:" + fmt.Sprintln(r))
 	if err != nil {
 		Log(fmt.Sprintln("2", err))
@@ -354,7 +352,7 @@ func fix_fingers() {
 		Fingers[checkingfinger] = new(Addre)
 	}
 	q := (idadd(addr2SHA1(*Self), z))
-	err := new(RP).FindSuccessor(q, Fingers[checkingfinger])
+	err := new(RPC).FindSuccessor(q, Fingers[checkingfinger])
 
 	if err != nil {
 		Log(fmt.Sprintln(err))
@@ -365,7 +363,7 @@ func fix_fingers() {
 	}
 
 	if checkingfinger == 17 || checkingfinger == 50 {
-		err = new(RP).Stabilize(1, new(Addre))
+		err = new(RPC).Stabilize(1, new(Addre))
 		if err != nil {
 			Log(fmt.Sprintln("3", err))
 		}
@@ -460,7 +458,7 @@ func getClient(query Addre) (client *rpc.Client, err error) {
 
 	client, isexist := ClientList[query]
 	if isexist && client != nil {
-		err := client.Call("RP.Replya", Self, new(string))
+		err := client.Call("RPC.Replya", Self, new(string))
 		if err == nil {
 			return client, nil
 		} else {
@@ -493,7 +491,7 @@ func checkPredecessor() {
 			//ClientMutex.Unlock()
 			return
 		} else {
-			err = client.Call("RP.Replya", Self, new(string))
+			err = client.Call("RPC.Replya", Self, new(string))
 			if err != nil {
 				Predecessor.Addre = nil
 				//ClientMutex.Unlock()
@@ -591,7 +589,7 @@ func Join(np *Addre, client *rpc.Client) error {
 	hoge := addr2SHA1(*n)
 	time.Sleep(1000 * time.Millisecond)
 
-	err := client.Call("RP.FindSuccessor", hoge, Successor)
+	err := client.Call("RPC.FindSuccessor", hoge, Successor)
 	Log(fmt.Sprintln(Successor))
 	if err != nil {
 		panic(err)
@@ -604,14 +602,14 @@ func Join(np *Addre, client *rpc.Client) error {
 		Log(fmt.Sprintln("10", err))
 
 	}
-	err = client1.Call("RP.LockS", Self, new(bool))
+	err = client1.Call("RPC.LockS", Self, new(bool))
 	if err != nil {
 		Log(fmt.Sprintln("11", err))
 	} else {
-		defer client1.Call("RP.ULockS", true, new(bool))
+		defer client1.Call("RPC.ULockS", true, new(bool))
 	}
 
-	err = client1.Call("RP.Notify", Self, new(Addre))
+	err = client1.Call("RPC.Notify", Self, new(Addre))
 	if err != nil {
 		Log(fmt.Sprintln("12", err))
 
@@ -634,7 +632,7 @@ func Log(logstr string) error {
 	}
 	return nil
 }
-func (a RP) ReplyPred(n *Addre, reply *Addre) error {
+func (a RPC) ReplyPred(n *Addre, reply *Addre) error {
 	if Predecessor.Addre == nil {
 
 		return errors.New("Reply_pred:Predecessor is nil")
@@ -643,7 +641,7 @@ func (a RP) ReplyPred(n *Addre, reply *Addre) error {
 
 	return nil
 }
-func (a RP) Notify(predCandidate Addre, reply *Addre) error {
+func (a RPC) Notify(predCandidate Addre, reply *Addre) error {
 	Log(fmt.Sprintln("notified by ", predCandidate, "My Pred:", Predecessor.Addre))
 	if predCandidate == *Self {
 		*reply = Addre{}
@@ -672,13 +670,13 @@ func (a RP) Notify(predCandidate Addre, reply *Addre) error {
 	return errors.New("you are not my predecessor")
 }
 
-func (a RP) Replya(n *Addre, reply *string) error {
+func (a RPC) Replya(n *Addre, reply *string) error {
 	tekitou := "a"
 	*reply = tekitou
 	return nil
 }
 
-func (a RP) FindSuccessor(query [20]byte, address *Addre) error {
+func (a RPC) FindSuccessor(query [20]byte, address *Addre) error {
 
 	if cmp, ok := iskeyin(query, addr2SHA1(*Self), addr2SHA1(*Successor)); (cmp && ok) && (query != addr2SHA1(*Self)) {
 		*address = *Successor
@@ -697,7 +695,7 @@ func (a RP) FindSuccessor(query [20]byte, address *Addre) error {
 					return err
 				}
 				ans1 := new(Addre)
-				err = client.Call("RP.FindSuccessor", query, ans1)
+				err = client.Call("RPC.FindSuccessor", query, ans1)
 
 				if err != nil {
 					Log(fmt.Sprintln(err))
@@ -714,16 +712,16 @@ func (a RP) FindSuccessor(query [20]byte, address *Addre) error {
 	}
 	return nil
 }
-func (a RP) LockS(b *Addre, re *bool) error {
+func (a RPC) LockS(b *Addre, re *bool) error {
 	Predecessor.ch <- true
 	return nil
 }
-func (a RP) ULockS(t bool, re *bool) error {
+func (a RPC) ULockS(t bool, re *bool) error {
 	<-Predecessor.ch
 	return nil
 }
 
-func (a RP) PredStabilizeCall(_ bool, reply *bool) error {
+func (a RPC) PredStabilizeCall(_ bool, reply *bool) error {
 	if OldPrede == nil || Predecessor.Addre == nil {
 		return nil
 	}
@@ -732,14 +730,14 @@ func (a RP) PredStabilizeCall(_ bool, reply *bool) error {
 		return e
 	}
 
-	e = c.Call("RP.Stabilize", 1, new(Addre))
+	e = c.Call("RPC.Stabilize", 1, new(Addre))
 
 	if e != nil {
 		return e
 	}
 	return nil
 }
-func (a RP) PutKey(query FileI, reply *bool) error {
+func (a RPC) PutKey(query FileI, reply *bool) error {
 	couldBeStored, ok := iskeyin(query.Key, addr2SHA1(*Predecessor.Addre), addr2SHA1(*Self))
 	if !ok {
 		return errors.New("error")
@@ -752,7 +750,7 @@ func (a RP) PutKey(query FileI, reply *bool) error {
 	}
 }
 
-func (a RP) GetFile(query [20]byte, reply *FileI) error {
+func (a RPC) GetFile(query [20]byte, reply *FileI) error {
 	obj, ok := Filelist[query]
 	if !ok {
 		return errors.New("not found")
