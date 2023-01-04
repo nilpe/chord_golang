@@ -377,7 +377,7 @@ func fix_fingers() {
 		if err != nil {
 			Log(fmt.Sprintln("5", err))
 		}
-		fmt.Println("debug")
+
 		f, err := os.OpenFile(Self.Ip+Self.Port+".txt", os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
 			Log(fmt.Sprintln("6", err))
