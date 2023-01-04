@@ -2,11 +2,11 @@
 chord algorithm with golang/ChordアルゴリズムのGoでの実装
 
 # 1.まえがき
-DHTの学習のためにChordアルゴリズムを実装した。
-実用を考えて作ったわけではないので様々な箇所が未調整である。
-また、DDoS対策をしておらず、実装していない機能も多いので、実際に使う場合は手を加えることを推奨する。
-なお、このプログラムでは"IP:Port" のSHA-1ハッシュをIDとして用いている。
-このプログラムはMITライセンスで公開されている。
+DHTの学習のためにChordアルゴリズムを実装した。  
+実用を考えて作ったわけではないので様々な箇所が未調整である。  
+また、DDoS対策をしておらず、実装していない機能も多いので、実際に使う場合は手を加えることを推奨する。  
+なお、このプログラムでは"IP:Port" のSHA-1ハッシュをIDとして用いている。  
+このプログラムはMITライセンスで公開されている。  
 
 
 
@@ -20,5 +20,5 @@ DHTの学習のためにChordアルゴリズムを実装した。
 5. 生成されたtxtファイルを確認する
 
 # 3.最後に
-このプログラムはChord: A Scalable Peer-to-Peer Lookup Protocol for Internet Applications に基づきます。
+このプログラムはChord: A Scalable Peer-to-Peer Lookup Protocol for Internet Applications に基づきます。  
 この場を借りて、原著者の方々に最大限の感謝を申し上げます。
