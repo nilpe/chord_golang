@@ -394,7 +394,11 @@ func fix_fingers() {
 			Log(fmt.Sprintln("9", err))
 		}
 
-		for i := 1; i < m; i++ {
+		_, err = fmt.Fprintf(f, "	%v", q)
+		if err != nil {
+			Log(fmt.Sprintln("9", err))
+		}
+		for i := 158; i < m; i++ {
 			if Fingers[i] != nil {
 
 				newLine := fmt.Sprintf("%v -> %v [style = \"dashed\", label = \"%v\"] ;", Self.Port, Fingers[i].Port, i)
