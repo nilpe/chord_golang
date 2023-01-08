@@ -148,8 +148,8 @@ func main() {
 	go func() { //StabilizeLoop
 
 		for {
-			//time.Sleep(15*time.Second + time.Duration(rand.Intn(10000000000)))
-			time.Sleep(1*time.Second + time.Duration(rand.Intn(1000000000)))
+			time.Sleep(15*time.Second + time.Duration(rand.Intn(10000000000)))
+			//time.Sleep(1*time.Second + time.Duration(rand.Intn(1000000000)))
 			err = new(RPC).Stabilize(1, new(Addre))
 			if err != nil {
 				Log(fmt.Sprintln(err))
@@ -336,7 +336,7 @@ func (a RPC) Stabilize(_ int, reply *Addre) error {
 	return nil
 }
 
-// n.fix_fingersに対応。
+// n.fingersに対応。
 // Fingerテーブルを更新する。ほとんど論文通りに実装できた。
 // 論文と違う点は、クライアントを閉じる処理をこの関数に追加した。
 // クライアントをきちんと閉じないと、メモリリーク･goroutineリークが起こって簡単にOOMキラーが発動する。
@@ -360,10 +360,9 @@ func fix_fingers() {
 
 	if err != nil {
 		Log(fmt.Sprintln(err))
-		fmt.Println(err)
 		return
 	}
-	if (*Fingers[checkingfinger]).Ip == "" || (*Fingers[checkingfinger]).Port == "" {
+	if Fingers[checkingfinger].Ip == "" {
 		Fingers[checkingfinger] = nil
 	}
 
@@ -395,11 +394,10 @@ func fix_fingers() {
 			Log(fmt.Sprintln("9", err))
 		}
 
-		for i := 0; i < m; i++ {
-			//for i := 1; i < m; i++ {
+		for i := 1; i < m; i++ {
 			if Fingers[i] != nil {
-				buf := addr2SHA1(*Fingers[i])
-				newLine := fmt.Sprintf("%v -> %v [style = \"dashed\", label = \"%v\",constraint=false] ;,%50s", Self.Port, Fingers[i].Port, i, new(big.Int).SetBytes(buf[:]))
+
+				newLine := fmt.Sprintf("%v -> %v [style = \"dashed\", label = \"%v\"] ;", Self.Port, Fingers[i].Port, i)
 				_, err = fmt.Fprintln(f, newLine)
 				if err != nil {
 					Log(fmt.Sprintln("9", err))
@@ -441,9 +439,6 @@ func fix_fingers() {
 func closestPrecedingNode(query [20]byte) (ad *Addre, ok bool) {
 	for i := m - 1; i >= 0; i-- {
 		if Fingers[i] != nil {
-			if (*Fingers[i]).Ip == "" {
-				continue
-			}
 			fingerbyte := addr2SHA1(*Fingers[i])
 			selfbyte := addr2SHA1(*Self)
 			if in, ok := iskeyin((fingerbyte), selfbyte, query); in && ok {
@@ -452,7 +447,7 @@ func closestPrecedingNode(query [20]byte) (ad *Addre, ok bool) {
 		}
 
 	}
-	return nil, false
+	return Self, true
 }
 
 // クライアントを取得する。
@@ -594,7 +589,6 @@ func idadd(x [20]byte, y *big.Int) [20]byte {
 	z := new(big.Int)
 	z = z.SetBytes(x[:])
 	z = z.Add(y, z)
-	z = z.Mod(z, new(big.Int).Exp(new(big.Int).SetInt64(2), new(big.Int).SetInt64(160), nil))
 	for i := 0; i < len(z.Bytes()) && i < 20; i++ {
 		tmp[i] = z.Bytes()[i]
 	}
@@ -722,20 +716,22 @@ func (a RPC) FindSuccessor(query [20]byte, address *Addre) error {
 		ans, ok := closestPrecedingNode(query)
 
 		if ok && ans != nil {
+			if *ans != *Self {
+				client, err := getClient(*ans)
 
-			client, err := getClient(*ans)
+				if err != nil {
+					return err
+				}
+				ans1 := new(Addre)
+				err = client.Call("RPC.FindSuccessor", query, ans1)
 
-			if err != nil {
-				return err
+				if err != nil {
+					Log(fmt.Sprintln(err))
+				}
+
+				*address = *ans1
+
 			}
-			ans1 := new(Addre)
-			err = client.Call("RPC.FindSuccessor", query, ans1)
-
-			if err != nil {
-				Log(fmt.Sprintln(err))
-			}
-
-			*address = *ans1
 
 		} else {
 			return errors.New("(Find_Suc)closestprecedingnode: error")
