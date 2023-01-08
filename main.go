@@ -394,10 +394,6 @@ func fix_fingers() {
 			Log(fmt.Sprintln("9", err))
 		}
 
-		_, err = fmt.Fprintf(f, "	%v", q)
-		if err != nil {
-			Log(fmt.Sprintln("9", err))
-		}
 		for i := 158; i < m; i++ {
 			if Fingers[i] != nil {
 
