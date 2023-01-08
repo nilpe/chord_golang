@@ -148,8 +148,8 @@ func main() {
 	go func() { //StabilizeLoop
 
 		for {
-			time.Sleep(15*time.Second + time.Duration(rand.Intn(10000000000)))
-			//time.Sleep(1*time.Second + time.Duration(rand.Intn(1000000000)))
+			//time.Sleep(15*time.Second + time.Duration(rand.Intn(10000000000)))
+			time.Sleep(1*time.Second + time.Duration(rand.Intn(1000000000)))
 			err = new(RPC).Stabilize(1, new(Addre))
 			if err != nil {
 				Log(fmt.Sprintln(err))
@@ -162,7 +162,7 @@ func main() {
 	Log("testz")
 	go func() {
 		for {
-			time.Sleep(1000*time.Millisecond + 0)
+			time.Sleep(200*time.Millisecond + 0)
 			/*if Predecessor.Addre != nil && *(Predecessor.Addre) != *Self {//*/
 
 			fix_fingers()
