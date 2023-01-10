@@ -396,13 +396,13 @@ func fix_fingers() {
 		Log(fmt.Sprintln(err))
 		return
 	}
-	if Fingers[checkingfinger].Ip == "" {
+	if *Fingers[checkingfinger] == *new(Addre) {
 		Fingers[checkingfinger] = nil
 	}
 	if checkingfinger == 10 {
 		for _, address := range Fingers {
 			if address != nil {
-				if address.Ip == "" || address.Port == "" {
+				if *address == *(new(Addre)) {
 					address = nil
 				}
 			}
@@ -480,10 +480,14 @@ func fix_fingers() {
 // このノードが持っている情報をもとに最も近いノードを探す。
 func closestPrecedingNode(query [20]byte) (ad *Addre, ok bool) {
 	for i := m - 1; i >= 0; i-- {
+
 		if Fingers[i] != nil {
+			if *Fingers[i] == *new(Addre) {
+				continue
+			}
 			fingerbyte := addr2SHA1(*Fingers[i])
 			selfbyte := addr2SHA1(*Self)
-			if in, ok := iskeyin((fingerbyte), selfbyte, query); in && ok {
+			if in, ok := iskeyin((fingerbyte), selfbyte, query); in && ok && (fingerbyte != selfbyte && fingerbyte != query) {
 				return Fingers[i], true
 			}
 		}
@@ -635,8 +639,6 @@ func idadd(x [20]byte, y *big.Int) [20]byte {
 	z2 := new(big.Int)
 	z.SetBytes(x[:])
 	z1.Add(y, z)
-	fmt.Println(z1)
-	fmt.Println(new(big.Int).Exp(bigTwo, bigM, nil))
 	z2.Mod(z1, new(big.Int).Exp(bigTwo, bigM, nil))
 	for i := 0; i < len(z2.Bytes()) && i < 20 && i < len(tmp); i++ {
 		tmp[i] = z2.Bytes()[i]
@@ -764,29 +766,28 @@ func (a RPC) FindSuccessor(query [20]byte, address *Addre) error {
 	} else if !cmp {
 		ans, ok := closestPrecedingNode(query)
 
-		if ok && ans != nil {
-			if *ans != *Self {
-				client, err := getClient(*ans)
+		if hoge := new(Addre); ok && ans != nil && *ans != *hoge {
 
-				if err != nil {
-					return err
-				}
-				ans1 := new(Addre)
-				err = client.Call("RPC.FindSuccessor", query, ans1)
+			client, err := getClient(*ans)
 
-				if err != nil {
-					Log(fmt.Sprintln(err))
-				}
+			if err != nil {
+				return err
+			}
+			ans1 := new(Addre)
+			err = client.Call("RPC.FindSuccessor", query, ans1)
 
-				*address = *ans1
-
+			if err != nil {
+				Log(fmt.Sprintln(err))
 			}
 
-		} else {
-			return errors.New("(Find_Suc)closestprecedingnode: error")
+			*address = *ans1
+
 		}
 
+	} else {
+		return errors.New("(Find_Suc)closestprecedingnode: error")
 	}
+
 	return nil
 }
 
