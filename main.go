@@ -57,6 +57,8 @@ var (
 	Nilcnt         int
 	ClientList     map[Addre]*rpc.Client
 
+	Debugq [160]([20]byte)
+
 	Electioning, AmIboss, Isworking bool
 	Self                            *Addre
 	FixingList                      []int
@@ -64,6 +66,8 @@ var (
 
 const m = 160 //sha1のbit数
 func main() {
+	//debug
+
 	//defer profile.Start(profile.MemProfile).Stop()
 	Filelist = make(map[[20]byte]FileI)
 	Predecessor.ch = make(chan bool, 1)
@@ -162,7 +166,7 @@ func main() {
 	Log("testz")
 	go func() {
 		for {
-			time.Sleep(200*time.Millisecond + 0)
+			time.Sleep(800*time.Millisecond + 0)
 			/*if Predecessor.Addre != nil && *(Predecessor.Addre) != *Self {//*/
 
 			fix_fingers()
@@ -179,7 +183,36 @@ func main() {
 		}
 
 	}()
+	go func() {
+		for {
+			time.Sleep(time.Second)
+			file, err := os.Create(Self.Ip + Self.Port + "debug.txt") // ファイルを作成
+			if err != nil {
+				Log(fmt.Sprintln("4", err))
+				panic(err)
+			}
 
+			err = file.Close()
+			if err != nil {
+				Log(fmt.Sprintln("5", err))
+			}
+
+			f, err := os.OpenFile(Self.Ip+Self.Port+"debug.txt", os.O_APPEND|os.O_WRONLY, 0644)
+			if err != nil {
+				Log(fmt.Sprintln("6", err))
+				return
+			}
+			for i := 0; i < m; i++ {
+				buf := Debugq[i]
+				newLine := fmt.Sprintf("%050s %v : %v ", new(big.Int).SetBytes(buf[:]), i, Fingers[i])
+				_, err = fmt.Fprintln(f, newLine)
+				if err != nil {
+					Log(fmt.Sprintln("9", err))
+				}
+			}
+		}
+
+	}()
 	var arr [2]string
 	var hoge Addre
 	hoge.Ip = "127.0.0.1"
@@ -272,7 +305,7 @@ func main() {
 	Log(fmt.Sprintln("worked on" + Self.Ip))
 }
 
-// これでRPCをListenする
+// これでRPCをListenする。論文上では存在しない関数。
 func Listener(Self Addre, ch chan bool) error {
 	addre := new(RPC)
 	rpc.Register(addre)
@@ -356,6 +389,7 @@ func fix_fingers() {
 		Fingers[checkingfinger] = new(Addre)
 	}
 	q := (idadd(addr2SHA1(*Self), z))
+	Debugq[checkingfinger] = q
 	err := new(RPC).FindSuccessor(q, Fingers[checkingfinger])
 
 	if err != nil {
@@ -365,7 +399,15 @@ func fix_fingers() {
 	if Fingers[checkingfinger].Ip == "" {
 		Fingers[checkingfinger] = nil
 	}
-
+	if checkingfinger == 10 {
+		for _, address := range Fingers {
+			if address != nil {
+				if address.Ip == "" || address.Port == "" {
+					address = nil
+				}
+			}
+		}
+	}
 	if checkingfinger == 0 {
 		file, err := os.Create(Self.Ip + Self.Port + ".txt") // ファイルを作成
 		if err != nil {
@@ -383,12 +425,12 @@ func fix_fingers() {
 			Log(fmt.Sprintln("6", err))
 			return
 		}
-		newLine := fmt.Sprintf("%v [shape = box]; ", Self.Port)
+		newLine := fmt.Sprintf("  %v [shape = box]; ", Self.Port)
 		_, err = fmt.Fprintln(f, newLine)
 		if err != nil {
 			Log(fmt.Sprintln("8", err))
 		}
-		newLine = fmt.Sprintf(" %v -> %v [style = \"solid\", label = \"next\"];", Self.Port, Fingers[1].Port)
+		newLine = fmt.Sprintf(" %v -> %v [style = \"solid\", label = \"next\"];", Self.Port, Fingers[0].Port)
 		_, err = fmt.Fprintln(f, newLine)
 		if err != nil {
 			Log(fmt.Sprintln("9", err))
@@ -586,11 +628,18 @@ func iskeyin(query [20]byte, smaller [20]byte, larger [20]byte) (cmp bool, ok bo
 // sha-1ハッシュと整数を加算したいときに使う。
 func idadd(x [20]byte, y *big.Int) [20]byte {
 	var tmp [20]byte
+	bigTwo := big.NewInt(2)
+	bigM := big.NewInt(m)
 	z := new(big.Int)
-	z = z.SetBytes(x[:])
-	z = z.Add(y, z)
-	for i := 0; i < len(z.Bytes()) && i < 20; i++ {
-		tmp[i] = z.Bytes()[i]
+	z1 := new(big.Int)
+	z2 := new(big.Int)
+	z.SetBytes(x[:])
+	z1.Add(y, z)
+	fmt.Println(z1)
+	fmt.Println(new(big.Int).Exp(bigTwo, bigM, nil))
+	z2.Mod(z1, new(big.Int).Exp(bigTwo, bigM, nil))
+	for i := 0; i < len(z2.Bytes()) && i < 20 && i < len(tmp); i++ {
+		tmp[i] = z2.Bytes()[i]
 	}
 	return tmp
 }
